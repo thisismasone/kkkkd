@@ -1,6 +1,6 @@
 # github-sandbox
 
-## Download files, videos, and webpages with GitHub Actions
+## Download files, videos, and webpages with GitHub Actions 
 
 This repository provides GitHub workflow automation for:
 
