@@ -1,0 +1,153 @@
+name: Download from Commit & Save to Repo
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode: file | file-zip | yt | yt-zip | yt-split | web | web-crawl"
+        required: true
+        default: "file"
+      url_list:
+        description: "URLs for file/video modes (space or newline separated)"
+        required: false
+      yt_format:
+        description: "yt-dlp format selector (e.g. bv*+ba/b)"
+        required: false
+      yt_quality:
+        description: "YouTube max quality: 144p | 240p | 360p | 480p | 720p | 1080p | 1440p | 2160p"
+        required: false
+        default: "1080p"
+      offline_url:
+        description: "URL for web/web-crawl modes"
+        required: false
+      storage_mode:
+        description: "repo | release (release reserved for future path)"
+        required: false
+        default: "repo"
+      chunk_target_mb:
+        description: "Max size per generated file/chunk"
+        required: false
+        default: "95"
+      dry_run:
+        description: "If true, resolves command but does not download"
+        required: false
+        default: "false"
+      incremental_push:
+        description: "Commit/push per URL: auto (when multiple URLs) | true | false"
+        required: false
+        default: "auto"
+
+# Allow multiple workflow runs at once (e.g. several manual dispatches). Each run
+# pulls --rebase before push; avoid editing downloads/** at identical paths in parallel.
+jobs:
+  save-file:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 2
+
+      - name: Resolve requested mode
+        id: resolve_mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
+          INPUT_MODE: ${{ github.event.inputs.mode || '' }}
+        run: |
+          set -euo pipefail
+
+          has_command="false"
+          resolved_cmd=""
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$INPUT_MODE" in
+              file) resolved_cmd="download"; has_command="true" ;;
+              file-zip) resolved_cmd="download-zip"; has_command="true" ;;
+              yt) resolved_cmd="download-yt"; has_command="true" ;;
+              yt-zip) resolved_cmd="download-yt-zip"; has_command="true" ;;
+              yt-split) resolved_cmd="download-yt-split"; has_command="true" ;;
+              web) resolved_cmd="download-web"; has_command="true" ;;
+              web-crawl) resolved_cmd="download-web-crawl"; has_command="true" ;;
+            esac
+          else
+            command_line="$(printf "%s\n" "$COMMIT_MESSAGE" | awk '/^(download(-yt)?(-zip|-split)?|download-web(-crawl)?):/ {print; exit}')"
+            if [ -n "$command_line" ]; then
+              resolved_cmd="${command_line%%:*}"
+              has_command="true"
+            fi
+          fi
+
+          needs_yt="false"
+          needs_web="false"
+          case "$resolved_cmd" in
+            download-yt|download-yt-zip|download-yt-split) needs_yt="true" ;;
+            download-web|download-web-crawl) needs_web="true" ;;
+          esac
+
+          echo "has_command=$has_command" >> "$GITHUB_OUTPUT"
+          echo "resolved_cmd=$resolved_cmd" >> "$GITHUB_OUTPUT"
+          echo "needs_yt=$needs_yt" >> "$GITHUB_OUTPUT"
+          echo "needs_web=$needs_web" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Python (cached pip)
+        if: ${{ steps.resolve_mode.outputs.needs_yt == 'true' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: "scripts/download/requirements-download.txt"
+
+      - name: Install yt dependencies
+        if: ${{ steps.resolve_mode.outputs.needs_yt == 'true' }}
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r scripts/download/requirements-download.txt
+
+      - name: Setup Node (cached npm)
+        if: ${{ steps.resolve_mode.outputs.needs_web == 'true' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "package-lock.json"
+
+      - name: Install web capture dependencies
+        if: ${{ steps.resolve_mode.outputs.needs_web == 'true' }}
+        run: |
+          set -euo pipefail
+          npm ci
+          npx playwright install chromium
+
+      - name: Resolve and execute download mode
+        if: ${{ steps.resolve_mode.outputs.has_command == 'true' }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
+          INPUT_MODE: ${{ github.event.inputs.mode || '' }}
+          INPUT_URL_LIST: ${{ github.event.inputs.url_list || '' }}
+          INPUT_YT_FORMAT: ${{ github.event.inputs.yt_format || '' }}
+          INPUT_YT_QUALITY: ${{ github.event.inputs.yt_quality || '1080p' }}
+          INPUT_OFFLINE_URL: ${{ github.event.inputs.offline_url || '' }}
+          INPUT_STORAGE_MODE: ${{ github.event.inputs.storage_mode || '' }}
+          INPUT_CHUNK_TARGET_MB: ${{ github.event.inputs.chunk_target_mb || '' }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || '' }}
+          INPUT_INCREMENTAL_PUSH: ${{ github.event.inputs.incremental_push || 'auto' }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+        run: |
+          set -euo pipefail
+          bash scripts/download/orchestrate.sh
+
+      - name: Commit and push downloads
+        if: ${{ github.event_name != 'pull_request' && steps.resolve_mode.outputs.has_command == 'true' }}
+        run: |
+          set -euo pipefail
+          bash scripts/download/commit_push.sh "${GITHUB_REF_NAME}"

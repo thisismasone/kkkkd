@@ -1,0 +1,15 @@
+# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+www.eporner.com	FALSE	/	FALSE	1780050061	_pk_id.1.5d0f	b3ca67b9d79ebd53.1746094861.
+www.eporner.com	FALSE	/	FALSE	1782946868	kdSspUid	4ade2a37-2d93-4103-a815-437bfce0c834
+www.eporner.com	FALSE	/	FALSE	1782946871	_ym_uid	1751410872732800067
+www.eporner.com	FALSE	/	FALSE	1782946871	_ym_d	1751410872
+.eporner.com	TRUE	/	TRUE	1778910578	EPRNS	9a207b409b8d82446100422930cf5972
+.eporner.com	TRUE	/	TRUE	1780292978	PHPSESSID	3ab564f45f24497baa37fbc602052ab5
+.eporner.com	TRUE	/	FALSE	1809236994	ageverif_accepted	T
+.eporner.com	TRUE	/	FALSE	1809236994	epcolor	black
+www.eporner.com	FALSE	/	FALSE	1793468982	_pk_ref.1.5d0f	%5B%22%22%2C%22%22%2C1777700983%2C%22https%3A%2F%2Fwww.google.com%2F%22%5D
+www.eporner.com	FALSE	/	FALSE	1777702795	_pk_ses.1.5d0f	1
+www.eporner.com	FALSE	/	FALSE	1793252985	g_state	{"i_l":0,"i_ll":1777700985780,"i_b":"vUx1S+9TYz0+eGjzK6ofXbjs6Ak79wz12GBh5GK69bM","i_e":{"enable_itp_optimization":0},"i_et":1777700985777}

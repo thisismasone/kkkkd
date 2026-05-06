@@ -1,0 +1,89 @@
+name: Manual Media Download
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode: file | file-zip | yt | yt-zip | yt-split | web | web-crawl"
+        required: true
+        default: "file"
+      url_list:
+        description: "URLs for file/video modes (space or newline separated)"
+        required: false
+      yt_format:
+        description: "yt-dlp format selector (e.g. bv*+ba/b)"
+        required: false
+      yt_quality:
+        description: "YouTube max quality: 144p | 240p | 360p | 480p | 720p | 1080p | 1440p | 2160p"
+        required: false
+        default: "1080p"
+      offline_url:
+        description: "URL for web/web-crawl modes"
+        required: false
+      storage_mode:
+        description: "repo | release (release reserved for future path)"
+        required: false
+        default: "repo"
+      chunk_target_mb:
+        description: "Max size per generated file/chunk"
+        required: false
+        default: "95"
+      dry_run:
+        description: "If true, resolves command but does not download"
+        required: false
+        default: "false"
+      incremental_push:
+        description: "Commit/push per URL: auto (when multiple URLs) | true | false"
+        required: false
+        default: "auto"
+
+# Parallel manual runs allowed; push uses pull --rebase (see commit_push.sh).
+jobs:
+  run-manual-download:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y aria2 zip ffmpeg python3-pip jq
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade yt-dlp youtube-dl
+          npm install --no-save playwright
+          npm install -g single-file-cli
+          npx playwright install --with-deps chromium
+
+      - name: Execute manual mode
+        env:
+          EVENT_NAME: workflow_dispatch
+          INPUT_MODE: ${{ github.event.inputs.mode }}
+          INPUT_URL_LIST: ${{ github.event.inputs.url_list }}
+          INPUT_YT_FORMAT: ${{ github.event.inputs.yt_format }}
+          INPUT_YT_QUALITY: ${{ github.event.inputs.yt_quality }}
+          INPUT_OFFLINE_URL: ${{ github.event.inputs.offline_url }}
+          INPUT_STORAGE_MODE: ${{ github.event.inputs.storage_mode }}
+          INPUT_CHUNK_TARGET_MB: ${{ github.event.inputs.chunk_target_mb }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          INPUT_INCREMENTAL_PUSH: ${{ github.event.inputs.incremental_push || 'auto' }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+          YOUTUBE_COOKIES_B64: ${{ secrets.YOUTUBE_COOKIES_B64 }}
+        run: |
+          set -euo pipefail
+          bash scripts/download/orchestrate.sh
+
+      - name: Commit and push downloads
+        run: |
+          set -euo pipefail
+          bash scripts/download/commit_push.sh "${GITHUB_REF_NAME}"
